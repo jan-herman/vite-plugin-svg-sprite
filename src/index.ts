@@ -20,6 +20,12 @@ export interface Options {
    * @default 'src/public/images'
    */
   outputDir?: string
+  /**
+   * Sprite name
+   *
+   * @default 'sprite'
+   */
+  spriteName?: string
 
   /**
    * sprite-svg {@link https://github.com/svg-sprite/svg-sprite/blob/main/docs/configuration.md#sprite-svg-options|options}
@@ -50,6 +56,7 @@ export interface Options {
 export const defaultOptions: Required<Options> = {
   icons: 'src/assets/images/svg/*.svg',
   outputDir: 'src/public/images',
+  spriteName: 'sprite',
   sprite: {},
   generateType: false,
   typeName: 'SvgIcons',
@@ -70,12 +77,12 @@ function normalizePaths(root: string, path: string | undefined): string[] {
     .map(normalizePath)
 }
 
-function generateConfig(outputDir: string, options: Options): SVGSpriter.Config {
+function generateConfig(outputDir: string, spriteName: string, options: Options): SVGSpriter.Config {
   return {
     dest: normalizePath(resolve(root, outputDir)),
     mode: {
       symbol: {
-        sprite: '../sprite.svg',
+        sprite: `../${spriteName}.svg`,
       },
     },
     svg: {
@@ -94,14 +101,6 @@ function generateConfig(outputDir: string, options: Options): SVGSpriter.Config 
                   attrs: ['*:(data-*|style|fill):*'],
                 },
               },
-              {
-                name: 'addAttributesToSVGElement',
-                params: {
-                  attributes: [
-                    { fill: 'currentColor' },
-                  ],
-                },
-              },
               'removeXMLNS',
             ],
           },
@@ -116,11 +115,12 @@ async function generateSvgSprite(options: Required<Options>): Promise<string> {
   const {
     icons,
     outputDir,
+    spriteName,
     generateType,
     typeName,
     typeFileName,
   } = options
-  const spriter = new SVGSpriter(generateConfig(outputDir, options))
+  const spriter = new SVGSpriter(generateConfig(outputDir, spriteName, options))
   const rootDir = icons.replace(/(\/(\*+))+\.(.+)/g, '')
   const entries = await FastGlob([icons])
 
@@ -167,7 +167,7 @@ async function generateSvgSprite(options: Required<Options>): Promise<string> {
   return sprite.path.replace(root, '')
 }
 
-function ViteSvgSpriteWrapper(options: Options = {}): PluginOption {
+function vitePluginSvgSprite(options: Options = {}): PluginOption {
   const resolved = resolveOptions(options)
   const { icons } = resolved
   let timer: number | undefined
@@ -227,7 +227,7 @@ function ViteSvgSpriteWrapper(options: Options = {}): PluginOption {
           .catch(failGeneration)
       },
       config: () => ({ server: { watch: { disableGlobbing: false } } }),
-      configureServer({ watcher, hot }: ViteDevServer) {
+      configureServer({ watcher, ws }: ViteDevServer) {
         const iconsPath = normalizePaths(root, icons)
         const shouldReload = picomatch(iconsPath)
         const checkReload = (path: string) => {
@@ -235,7 +235,7 @@ function ViteSvgSpriteWrapper(options: Options = {}): PluginOption {
             schedule(() => {
               generateSvgSprite(resolved)
                 .then((res) => {
-                  hot.send({ type: 'full-reload', path: '*' })
+                  ws.send({ type: 'full-reload', path: '*' })
                   successGeneration(res)
                 })
                 .catch(failGeneration)
@@ -252,4 +252,4 @@ function ViteSvgSpriteWrapper(options: Options = {}): PluginOption {
   ]
 }
 
-export default ViteSvgSpriteWrapper
+export default vitePluginSvgSprite
